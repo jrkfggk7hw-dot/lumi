@@ -59,4 +59,6 @@ Tip: you can redesign Lumi just by editing the SVG in `web/index.html` and runni
 
 ## License
 
-MIT — free to use, change and share. Made with love (and Claude).
+GPL-3.0. Lumi is free: you can use, change and share her. If you share a changed version, it must stay free and open source under the same license, with credit kept.
+
+Copyright (c) 2026 jrkfggk7hw-dot. Made with love (and Claude).
