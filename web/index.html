@@ -90,6 +90,41 @@
     75%     { transform: rotate(0deg) translateY(2px); }
   }
 
+  /* extra dance moves (Lumi switches every few bars) */
+  #pet.vibing.move-sway #whole { animation: sway2 calc(var(--beat) * 2) ease-in-out infinite; }
+  #pet.vibing.move-sway #head  { animation: sway2 calc(var(--beat) * 2) ease-in-out infinite reverse; }
+  #pet.vibing.move-sway .eye, #pet.vibing.move-twirl .eye { opacity: 1; }
+  #pet.vibing.move-sway .happy-eyes, #pet.vibing.move-twirl .happy-eyes { opacity: 0; }
+  @keyframes sway2 { 0%,100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
+
+  #pet.vibing.move-headbang #head { animation: nod var(--beat) cubic-bezier(.5,0,.5,1) infinite; }
+  #pet.vibing.move-headbang #whole { animation: bounce var(--beat) ease-in-out infinite; }
+  @keyframes nod { 0%,100% { transform: translateY(0) rotate(0); } 35% { transform: translateY(6px) rotate(-3deg); } }
+
+  #pet.vibing.move-wings .wing { animation: bigflap calc(var(--beat) / 2) ease-in-out infinite; }
+  #pet.vibing.move-wings #whole { animation: hover calc(var(--beat) * 2) ease-in-out infinite; }
+  @keyframes bigflap { 0%,100% { transform: rotate(4deg); } 50% { transform: rotate(-24deg); } }
+  @keyframes hover { 0%,100% { transform: translateY(-4px); } 50% { transform: translateY(-12px); } }
+
+  #pet.vibing.move-twirl #whole { animation: twirl calc(var(--beat) * 4) ease-in-out infinite; }
+  @keyframes twirl {
+    0%,100% { transform: scaleX(1) translateY(0); }
+    20% { transform: scaleX(1) translateY(-8px); }
+    35% { transform: scaleX(-1) translateY(-8px); }
+    50% { transform: scaleX(-1) translateY(0); }
+    70% { transform: scaleX(-1) translateY(-8px); }
+    85% { transform: scaleX(1) translateY(-8px); }
+  }
+
+  /* sad (music paused) */
+  .mouth-sad { opacity: 0; transition: opacity .2s; }
+  #pet.sad .mouth-closed { opacity: 0; }
+  #pet.sad .mouth-sad { opacity: 1; }
+  #pet.sad .eye { transform: scaleY(.82) translateY(3px); }
+  #pet.sad #earL { animation: none; transform: rotate(16deg); transition: transform .4s; }
+  #pet.sad #earR { animation: none; transform: rotate(-16deg); transition: transform .4s; }
+  #pet.sad #head { animation: none; transform: translateY(3px); transition: transform .4s; }
+
   /* happy (after a click / when chatting) */
   #pet.happy .eye { opacity: 0; }
   #pet.happy .happy-eyes { opacity: 1; }
@@ -201,6 +236,7 @@
   .msg { max-width: 85%; padding: 8px 12px; border-radius: 16px; font-size: 13.5px; line-height: 1.42; white-space: pre-wrap; word-wrap: break-word; }
   .msg.assistant { align-self: flex-start; background: rgba(255,255,255,.08); border-bottom-left-radius: 5px; }
   .msg.user { align-self: flex-end; background: linear-gradient(135deg, #ff7cc8, #9a7bff); color: white; border-bottom-right-radius: 5px; }
+  .msg.error button { display: block; margin: 8px auto 2px; }
   .msg.error { align-self: center; background: rgba(255, 120, 150, .12); border: 1px solid rgba(255,120,150,.3); color: #ffd0dc; font-size: 12.5px; text-align: center; }
   .typing { display: flex; gap: 4px; padding: 12px 14px; }
   .typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: dot 1s infinite; }
@@ -265,11 +301,13 @@
   <div id="settings">
     <h2>How Lumi talks to Claude</h2>
     <label class="choice"><input type="radio" name="backend" value="auto">
-      <span>Automatic<small>Use your API key if you've added one, otherwise Claude Code.</small></span></label>
+      <span>Automatic<small>Use your API key if you've added one, otherwise your Claude account.</small></span></label>
     <label class="choice"><input type="radio" name="backend" value="cli">
-      <span>Claude Code login<small id="cliStatus">Uses the Claude Code app on this Mac.</small></span></label>
+      <span>My Claude account<small id="cliStatus">Free with your Claude plan.</small></span></label>
     <label class="choice"><input type="radio" name="backend" value="api">
       <span>Anthropic API key<small>Pay-as-you-go key from the Claude Console.</small></span></label>
+
+    <div class="row" style="margin:2px 0 4px"><button class="btn" id="loginBtn">Sign in to Claude</button></div>
 
     <h2>API key</h2>
     <div class="row">
@@ -284,6 +322,10 @@
     <div class="status" style="margin-top:0">Lumi dances whenever the Spotify app is playing.
       If she can't hear it, allow Lumi to control Spotify in
       <a data-url="x-apple.systempreferences:com.apple.preference.security?Privacy_Automation">Privacy &amp; Security → Automation</a>.</div>
+
+    <h2>Dancing</h2>
+    <label class="choice"><input type="checkbox" id="danceToggle" checked>
+      <span>Dance to music<small>You can also just ask Lumi to stop or start dancing.</small></span></label>
 
     <h2>Lumi</h2>
     <div class="row">
@@ -444,6 +486,7 @@
         <circle cx="94.5" cy="113" r="1.6" fill="var(--ink)" opacity=".75"/>
         <circle cx="105.5" cy="113" r="1.6" fill="var(--ink)" opacity=".75"/>
         <path class="mouth-closed" d="M91,119 Q100,126 109,119" fill="none" stroke="var(--ink)" stroke-width="2.3" stroke-linecap="round"/>
+        <path class="mouth-sad" d="M92,124 Q100,117 108,124" fill="none" stroke="var(--ink)" stroke-width="2.3" stroke-linecap="round"/>
         <g class="mouth-open">
           <path d="M92,118 Q100,131 108,118 Z" fill="#3a1236" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"/>
           <ellipse cx="100" cy="124.5" rx="3.6" ry="2.2" fill="#ff8fb8"/>
@@ -657,6 +700,8 @@
     chatEl.classList.remove('settings'); renderLog();
   };
   $('#quitBtn').onclick = () => post({ type: 'quit' });
+  $('#loginBtn').onclick = () => post({ type: 'login' });
+  $('#danceToggle').onchange = (e) => post({ type: 'setDance', on: e.target.checked });
   document.querySelectorAll('[data-url]').forEach(a => a.onclick = () => post({ type: 'openURL', url: a.dataset.url }));
   document.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => post({ type: 'spotify', action: b.dataset.sp }));
 
@@ -670,6 +715,8 @@
 
   // ---------- music ----------
   let vibing = false, trackId = null, noteTimer = null, warnedPermission = false, firstSpotify = true;
+  let wasPlaying = false, danceEnabled = true, playing = false, currentBpm = 110, moveTimer = null;
+  const moves = ['bob', 'sway', 'headbang', 'wings', 'twirl'];
   function bpmFor(id) {
     // Spotify's desktop app doesn't expose tempo, so each song gets its own stable groove.
     let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
@@ -682,21 +729,38 @@
     vibing = on;
     pet.classList.toggle('vibing', on);
     clearInterval(noteTimer); noteTimer = null;
-    if (on) { touch(); noteTimer = setInterval(() => { if (Math.random() < .55) spawnNote(); }, beat * 1000 * 2); }
+    clearInterval(moveTimer); moveTimer = null;
+    setMove('bob');
+    if (on) {
+      touch(); pet.classList.remove('sad');
+      noteTimer = setInterval(() => { if (Math.random() < .55) spawnNote(); }, beat * 1000 * 2);
+      // switch to a new move every 8 beats
+      moveTimer = setInterval(() => setMove(pick(moves)), beat * 1000 * 8);
+    }
   }
+  function setMove(m) {
+    moves.forEach(x => pet.classList.remove('move-' + x));
+    pet.classList.add('move-' + m);
+  }
+  function applyDance() { setVibing(playing && danceEnabled, currentBpm); }
 
   // ---------- native → web API ----------
   window.lumi = {
     openChat,
+    setDance(on) {
+      danceEnabled = !!on;
+      $('#danceToggle').checked = danceEnabled;
+      applyDance();
+    },
     onSpotify(info) {
-      const playing = info.state === 'playing';
+      playing = info.state === 'playing';
       const player = $('#player');
       if (info.track) {
         $('#npText').textContent = `${info.track} — ${info.artist}`;
         player.classList.add('show');
         player.classList.toggle('paused', !playing);
         $('#ppBtn').textContent = playing ? '⏸' : '▶︎';
-        $('#subtitle').textContent = playing ? `vibing to ${info.track}` : 'your tiny dragon friend';
+        $('#subtitle').textContent = playing ? `${danceEnabled ? 'vibing' : 'listening'} to ${info.track}` : 'your tiny dragon friend';
       } else {
         player.classList.remove('show');
         $('#subtitle').textContent = 'your tiny dragon friend';
@@ -709,16 +773,20 @@
         trackId = info.id;
         if (!firstSpotify || !chatOpen) say(`🎵 <b>${esc(info.track)}</b><br>${esc(info.artist)}`);
       }
+      if (playing === false && wasPlaying && info.state === 'paused' && danceEnabled) flash('sad', 3500);
+      wasPlaying = playing;
       firstSpotify = false;
-      setVibing(playing, info.id ? bpmFor(info.id) : 110);
+      currentBpm = info.id ? bpmFor(info.id) : 110;
+      applyDance();
     },
     onConfig(cfg) {
+      if ('dance' in cfg) lumi.setDance(cfg.dance);
       const r = document.querySelector(`input[name=backend][value=${cfg.backend}]`);
       if (r) r.checked = true;
       $('#keyStatus').innerHTML = cfg.hasKey ? '<span class="ok">✓ API key saved.</span> Paste a new one to replace it, or save empty to remove.' : 'No key saved.';
-      $('#cliStatus').innerHTML = cfg.hasCLI ? 'Uses Claude Code on this Mac. <span class="ok">✓ Found</span>' : 'Claude Code not found on this Mac.';
+      $('#cliStatus').innerHTML = cfg.hasCLI ? 'Free with your Claude plan. <span class="ok">✓ Claude found on this Mac</span>' : 'Needs the Claude desktop app installed.';
     },
-    onChatReply({ id, text, error }) {
+    onChatReply({ id, text, error, needsLogin }) {
       if (id !== pendingId) return;
       waiting = false; sendBtn.disabled = false;
       $('#typing')?.remove();
@@ -726,8 +794,19 @@
       if (error) {
         history.pop(); // keep the conversation valid for a retry
         store.set('lumi.history', history);
-        addMsg('error', error);
+        const el = addMsg('error', error);
+        if (needsLogin) {
+          const b = document.createElement('button');
+          b.className = 'btn primary'; b.textContent = 'Sign in to Claude';
+          b.onclick = () => post({ type: 'login' });
+          el.appendChild(b); log.scrollTop = log.scrollHeight;
+        }
       } else {
+        // Lumi can switch her own dancing with [[dance:on]] / [[dance:off]]
+        const tag = text.match(/\[\[dance:(on|off)\]\]/);
+        text = text.replace(/\s*\[\[dance:(on|off)\]\]\s*/g, ' ').trim();
+        if (tag) post({ type: 'setDance', on: tag[1] === 'on' });
+        if (tag && !bridge) lumi.setDance(tag[1] === 'on');
         history.push({ role: 'assistant', content: text });
         store.set('lumi.history', history.slice(-40));
         addMsg('assistant', text);
