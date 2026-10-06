@@ -18,9 +18,10 @@ cp -R web "$APP/Contents/Resources/web"
 [ -f assets/AppIcon.icns ] && cp assets/AppIcon.icns "$APP/Contents/Resources/"
 
 echo "→ Signing (ad-hoc)…"
+xattr -cr "$APP"
 codesign --force --deep --sign - "$APP"
 
 echo "→ Zipping for sharing…"
-(cd build && ditto -c -k --keepParent Lumi.app Lumi-macOS.zip)
+(cd build && ditto -c -k --norsrc --noextattr --noacl --keepParent Lumi.app Lumi-macOS.zip)
 
 echo "✓ Done: $APP and build/Lumi-macOS.zip"
