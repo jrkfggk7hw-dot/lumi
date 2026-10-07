@@ -31,11 +31,52 @@
 
   /* ---------- Stage & pet ---------- */
   #stage {
-    position: relative; width: 200px; height: 190px; flex: none;
+    position: relative; width: 280px; height: 210px; flex: none; --lamp: 1;
     cursor: grab; touch-action: none;
   }
   #stage:active { cursor: grabbing; }
-  #pet { width: 200px; height: 200px; position: absolute; left: 0; bottom: -6px; overflow: visible; }
+  #den, #denFront { position: absolute; inset: 0; width: 280px; height: 210px; overflow: visible; }
+  #denFront { pointer-events: none; }
+  #lantern { pointer-events: bounding-box; cursor: pointer; }
+  #petWrap {
+    position: absolute; left: 65px; bottom: 8px; width: 150px; height: 150px;
+    transform-origin: 75px 150px;
+    transition: transform 1.4s cubic-bezier(.5,0,.5,1), opacity .4s;
+  }
+  #pet { width: 150px; height: 150px; position: absolute; left: 0; bottom: -4px; overflow: visible; }
+
+  /* ---------- den ---------- */
+  #door { cursor: pointer; }
+  .den-star { animation: twinkle 3s ease-in-out infinite; }
+  .den-star:nth-of-type(2n) { animation-delay: 1s; }
+  .door-sleeper, #doorZzz { opacity: 0; transition: opacity .6s .9s; }
+  #doorZzz text { animation: zfloat 3s ease-in-out infinite; }
+  #doorZzz text:nth-child(2) { animation-delay: 1s; }
+  #doorZzz text:nth-child(3) { animation-delay: 2s; }
+  body.in-den #petWrap {
+    transform: translateY(-26px) scale(.34); opacity: 0; pointer-events: none;
+    transition: transform 1.4s cubic-bezier(.5,0,.5,1), opacity .5s 1s;
+  }
+  body.in-den .door-sleeper, body.in-den #doorZzz { opacity: 1; }
+  .sleeper-eyes { animation: breathe2 4s ease-in-out infinite; transform-origin: 140px 158px; transform-box: view-box; }
+  @keyframes breathe2 { 50% { transform: translateY(1px); } }
+
+  /* lantern = energy */
+  #lampGlow { opacity: var(--lamp); transition: opacity 1.5s; }
+  #flame { transform-origin: 256px 120px; transform-box: view-box; transform: scale(calc(.45 + .55 * var(--lamp))); transition: transform 1.5s; animation: flicker 2.6s ease-in-out infinite; }
+  #stage.ember #flame { animation: flicker .9s steps(3) infinite; }
+  #stage.ember #lampGlow { animation: emberglow 2s ease-in-out infinite; }
+  @keyframes flicker { 0%,100% { opacity: 1; } 40% { opacity: .82; } 60% { opacity: .95; } }
+  @keyframes emberglow { 50% { opacity: calc(var(--lamp) * .5); } }
+  #charge { opacity: 0; transition: opacity .4s; }
+  #stage.charging #charge { opacity: 1; animation: twinkle 1.6s ease-in-out infinite; }
+  #peek {
+    position: absolute; right: 0; bottom: 118px; padding: 5px 9px; border-radius: 10px;
+    background: linear-gradient(160deg, var(--panel-1), var(--panel-2)); border: 1px solid rgba(255,255,255,.14);
+    font-size: 11px; white-space: nowrap; line-height: 1.4; text-align: right;
+    opacity: 0; transform: translateY(4px); transition: opacity .2s, transform .2s; pointer-events: none;
+  }
+  #peek.show { opacity: 1; transform: none; }
   #pet * { transform-box: view-box; }
 
   #whole { transform-origin: 100px 186px; }
@@ -164,8 +205,8 @@
 
   /* speech bubble (compact mode) */
   #bubble {
-    position: absolute; left: 50%; bottom: 186px; transform: translate(-50%, 6px) scale(.9);
-    max-width: 228px; width: max-content;
+    position: absolute; left: 50%; bottom: 178px; transform: translate(-50%, 6px) scale(.9);
+    max-width: 250px; width: max-content; z-index: 2;
     padding: 8px 12px; border-radius: 16px;
     background: linear-gradient(160deg, var(--panel-1), var(--panel-2));
     border: 1px solid rgba(255,255,255,.14);
@@ -274,6 +315,7 @@
   .btn.primary { background: linear-gradient(135deg, var(--pink), var(--lav)); color: white; }
   .status { font-size: 12px; color: var(--muted); margin-top: 6px; }
   .ok { color: var(--mint); }
+  select { background: rgba(255,255,255,.08); color: var(--text); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; padding: 4px 6px; font: inherit; font-size: 12px; }
   a { color: var(--sky); cursor: pointer; text-decoration: underline; }
 </style>
 </head>
@@ -323,6 +365,18 @@
       If she can't hear it, allow Lumi to control Spotify in
       <a data-url="x-apple.systempreferences:com.apple.preference.security?Privacy_Automation">Privacy &amp; Security → Automation</a>.</div>
 
+    <h2>Energy</h2>
+    <div class="status" style="margin-top:0">Lumi's lantern shows her energy: your Mac's battery, and how much she's chatted today.
+      When she runs low she goes to bed in her cloud den — click the doorway to wake her.
+      To tuck her in yourself, right-click her → Send to Den, or just tell her it's bedtime.</div>
+    <label class="choice" style="margin-top:8px"><span style="flex:1">Daily chat limit<small>She stops chatting once she's used this many tokens today (about 900 per message).</small></span>
+      <select id="budgetSel" style="align-self:center">
+        <option value="5000">5k · ~5 msgs</option>
+        <option value="10000">10k · ~10 msgs</option>
+        <option value="20000">20k · ~20 msgs</option>
+        <option value="50000">50k · ~50 msgs</option>
+      </select></label>
+
     <h2>Dancing</h2>
     <label class="choice"><input type="checkbox" id="danceToggle" checked>
       <span>Dance to music<small>You can also just ask Lumi to stop or start dancing.</small></span></label>
@@ -341,6 +395,52 @@
 
 <div id="stage">
   <div id="bubble"></div>
+  <svg id="den" viewBox="0 0 280 210" aria-label="Lumi's cloud den">
+    <defs>
+      <linearGradient id="gCloud" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fffdff"/>
+        <stop offset=".55" stop-color="#ece3ff"/>
+        <stop offset="1" stop-color="#cdbcff"/>
+      </linearGradient>
+      <linearGradient id="gDoor" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#3d3276"/>
+        <stop offset="1" stop-color="#17143a"/>
+      </linearGradient>
+    </defs>
+    <ellipse cx="140" cy="204" rx="122" ry="6" fill="#000" opacity=".12"/>
+    <g fill="none" stroke="#b6a2f2" stroke-width="3.5">
+      <circle cx="48" cy="130" r="34"/><circle cx="84" cy="94" r="42"/><circle cx="140" cy="76" r="50"/>
+      <circle cx="196" cy="94" r="42"/><circle cx="232" cy="130" r="34"/>
+      <rect x="20" y="124" width="240" height="72" rx="30"/>
+    </g>
+    <g fill="url(#gCloud)">
+      <circle cx="48" cy="130" r="34"/><circle cx="84" cy="94" r="42"/><circle cx="140" cy="76" r="50"/>
+      <circle cx="196" cy="94" r="42"/><circle cx="232" cy="130" r="34"/>
+      <rect x="20" y="124" width="240" height="72" rx="30"/>
+    </g>
+    <g fill="#fff" opacity=".7">
+      <circle cx="74" cy="78" r="12"/><circle cx="122" cy="52" r="14"/><circle cx="96" cy="66" r="7"/>
+    </g>
+    <path d="M44,56 A14,14 0 1 0 54,82 A11,11 0 1 1 44,56 Z" fill="#ffd66b"/>
+    <circle class="den-star" cx="70" cy="44" r="1.6" fill="#ffd9f4"/>
+    <circle class="den-star" cx="214" cy="54" r="1.8" fill="#c8f0ff"/>
+    <circle class="den-star" cx="236" cy="96" r="1.4" fill="#ffd9f4"/>
+    <circle class="den-star" cx="30" cy="104" r="1.4" fill="#c8f0ff"/>
+    <g id="door">
+      <path d="M106,196 L106,146 A34,34 0 0 1 174,146 L174,196 Z" fill="url(#gDoor)" stroke="#fff" stroke-opacity=".8" stroke-width="3"/>
+      <g class="door-sleeper">
+        <g class="sleeper-eyes" fill="none" stroke="#9ff5d8" stroke-width="2.4" stroke-linecap="round">
+          <path d="M126,157 Q131,161 136,157"/><path d="M144,157 Q149,161 154,157"/>
+        </g>
+      </g>
+      <g id="doorZzz" fill="#7d6bd0" font-family="ui-rounded, -apple-system" font-weight="700">
+        <text x="166" y="128" font-size="11">z</text>
+        <text x="174" y="116" font-size="13">z</text>
+        <text x="183" y="102" font-size="16">Z</text>
+      </g>
+    </g>
+  </svg>
+  <div id="petWrap">
   <svg id="pet" viewBox="0 0 200 200" aria-label="Lumi the dragon-unicorn">
     <defs>
       <linearGradient id="gScale" x1="0" y1="0" x2="0" y2="1">
@@ -500,6 +600,47 @@
       </g>
     </g>
   </svg>
+  </div>
+  <svg id="denFront" viewBox="0 0 280 210">
+    <defs>
+      <linearGradient id="gRim" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffffff"/>
+        <stop offset="1" stop-color="#ddd0ff"/>
+      </linearGradient>
+      <radialGradient id="gGlow">
+        <stop offset="0" stop-color="#ffd98a" stop-opacity=".85"/>
+        <stop offset=".45" stop-color="#ffb86b" stop-opacity=".3"/>
+        <stop offset="1" stop-color="#ffb86b" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="gFlame" cx=".5" cy=".65" r=".6">
+        <stop offset="0" stop-color="#fffbe6"/>
+        <stop offset=".5" stop-color="#ffd36b"/>
+        <stop offset="1" stop-color="#ff9a4d"/>
+      </radialGradient>
+    </defs>
+    <g fill="none" stroke="#b6a2f2" stroke-width="3">
+      <circle cx="40" cy="194" r="20"/><circle cx="74" cy="198" r="22"/><circle cx="108" cy="200" r="20"/>
+      <circle cx="140" cy="201" r="22"/><circle cx="172" cy="200" r="20"/><circle cx="206" cy="198" r="22"/>
+      <circle cx="240" cy="194" r="20"/>
+      <rect x="22" y="196" width="236" height="12" rx="6"/>
+    </g>
+    <g fill="url(#gRim)">
+      <circle cx="40" cy="194" r="20"/><circle cx="74" cy="198" r="22"/><circle cx="108" cy="200" r="20"/>
+      <circle cx="140" cy="201" r="22"/><circle cx="172" cy="200" r="20"/><circle cx="206" cy="198" r="22"/>
+      <circle cx="240" cy="194" r="20"/>
+      <rect x="22" y="196" width="236" height="12" rx="6"/>
+    </g>
+    <g id="lantern">
+      <circle id="lampGlow" cx="256" cy="118" r="30" fill="url(#gGlow)"/>
+      <path d="M268,200 L268,98 Q268,84 256,86 L256,96" fill="none" stroke="#8b7cc8" stroke-width="3" stroke-linecap="round"/>
+      <path d="M249,100 L263,100 L260,96 L252,96 Z" fill="#6f61b0"/>
+      <rect x="248" y="100" width="16" height="23" rx="4" fill="#fff6dd" fill-opacity=".35" stroke="#6f61b0" stroke-width="2"/>
+      <ellipse id="flame" cx="256" cy="114" rx="4" ry="6.5" fill="url(#gFlame)"/>
+      <path d="M250,123 L262,123 L260,127 L252,127 Z" fill="#6f61b0"/>
+      <text id="charge" x="262" y="98" font-size="10">⚡</text>
+    </g>
+  </svg>
+  <div id="peek"></div>
 </div>
 
 <script>
@@ -509,6 +650,7 @@
 
   const $ = (s) => document.querySelector(s);
   const pet = $('#pet'), stage = $('#stage'), bubble = $('#bubble');
+  const petWrap = $('#petWrap'), door = $('#door'), lantern = $('#lantern'), peek = $('#peek');
   const chatEl = $('#chat'), log = $('#log'), input = $('#input'), sendBtn = $('#sendBtn');
 
   const store = {
@@ -522,8 +664,9 @@
   // ---------- hit areas (everything else is click-through) ----------
   function reportHits() {
     const rects = [];
-    const s = stage.getBoundingClientRect();
-    rects.push([s.left + 18, s.top + 10, s.width - 36, s.height - 6]);
+    const box = (el, pad = 0) => { const r = el.getBoundingClientRect(); rects.push([r.left + pad, r.top + pad, r.width - pad * 2, r.height - pad * 2]); };
+    if (inDen) box(door); else box(petWrap, 12);
+    box(lantern);
     if (bubble.classList.contains('show')) {
       const b = bubble.getBoundingClientRect();
       rects.push([b.left, b.top, b.width, b.height]);
@@ -550,11 +693,13 @@
       document.querySelectorAll('.pupils').forEach(p => p.style.transform = `translate(${dx}px, ${dy}px)`);
     // doze off after 3 quiet minutes
     if (!vibing && !chatOpen && Date.now() - lastInteraction > 180000) pet.classList.add('sleepy');
+    checkBedtime();
   }, 2600);
 
   // ---------- speech bubble ----------
   let bubbleTimer;
   function say(html, ms = 4500) {
+    if (inDen) return;   // shh, she's sleeping
     bubble.innerHTML = html;
     bubble.classList.add('show');
     reportHits();
@@ -579,13 +724,13 @@
   }
   function spawnNote() {
     const left = Math.random() < .5;
-    fx('note', pick(noteGlyphs), left ? 40 + Math.random() * 20 : 140 + Math.random() * 20, 40 + Math.random() * 20,
+    fx('note', pick(noteGlyphs), left ? 82 + Math.random() * 16 : 172 + Math.random() * 16, 66 + Math.random() * 16,
        { '--dx': (left ? -1 : 1) * (10 + Math.random() * 18) + 'px', '--rot': (Math.random() * 40 - 20) + 'deg' });
   }
   function sparkleBurst() {
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2, r = 45 + Math.random() * 20;
-      fx('spark', pick(['✦', '✧', '⋆', '♡']), 94, 80, { '--dx': Math.cos(a) * r + 'px', '--dy': Math.sin(a) * r + 'px' });
+      fx('spark', pick(['✦', '✧', '⋆', '♡']), 132, 106, { '--dx': Math.cos(a) * r + 'px', '--dy': Math.sin(a) * r + 'px' });
     }
   }
   function flash(cls, ms) { pet.classList.add(cls); setTimeout(() => pet.classList.remove(cls), ms); }
@@ -594,7 +739,9 @@
   let down = null;
   stage.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    down = { x: e.screenX, y: e.screenY, lx: e.screenX, ly: e.screenY, moved: false };
+    const zone = e.target.closest('#lantern') ? 'lantern' : e.target.closest('#door') ? 'door'
+               : e.target.closest('#petWrap') ? 'pet' : 'other';
+    down = { x: e.screenX, y: e.screenY, lx: e.screenX, ly: e.screenY, moved: false, zone };
     stage.setPointerCapture(e.pointerId);
     touch();
   });
@@ -610,12 +757,16 @@
   });
   stage.addEventListener('pointerup', () => {
     if (!down) return;
-    const wasDrag = down.moved; down = null;
-    if (wasDrag) { post({ type: 'dragEnd' }); return; }
-    petClicked();
+    const { moved, zone } = down; down = null;
+    if (moved) { post({ type: 'dragEnd' }); return; }
+    if (zone === 'pet') petClicked();
+    else if (zone === 'door' && inDen) wakeUp(true);
+    else if (zone === 'lantern') showPeek(3000);
   });
-  stage.addEventListener('pointerenter', () => { pet.classList.add('hover'); touch(); });
-  stage.addEventListener('pointerleave', () => pet.classList.remove('hover'));
+  petWrap.addEventListener('pointerenter', () => { pet.classList.add('hover'); touch(); });
+  petWrap.addEventListener('pointerleave', () => pet.classList.remove('hover'));
+  lantern.addEventListener('pointerenter', () => showPeek());
+  lantern.addEventListener('pointerleave', () => peek.classList.remove('show'));
   document.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     if (stage.contains(e.target)) post({ type: 'contextMenu' });
@@ -632,6 +783,7 @@
   let pendingId = 0, waiting = false;
 
   function openChat(view) {
+    if (inDen) wakeUp(true);
     chatOpen = true; touch();
     document.body.classList.add('chat-open');
     chatEl.classList.toggle('settings', view === 'settings');
@@ -701,6 +853,7 @@
   };
   $('#quitBtn').onclick = () => post({ type: 'quit' });
   $('#loginBtn').onclick = () => post({ type: 'login' });
+  $('#budgetSel').onchange = (e) => post({ type: 'setBudget', budget: Number(e.target.value) });
   $('#danceToggle').onchange = (e) => post({ type: 'setDance', on: e.target.checked });
   document.querySelectorAll('[data-url]').forEach(a => a.onclick = () => post({ type: 'openURL', url: a.dataset.url }));
   document.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => post({ type: 'spotify', action: b.dataset.sp }));
@@ -742,11 +895,79 @@
     moves.forEach(x => pet.classList.remove('move-' + x));
     pet.classList.add('move-' + m);
   }
-  function applyDance() { setVibing(playing && danceEnabled, currentBpm); }
+  function applyDance() { setVibing(playing && danceEnabled && !inDen, currentBpm); }
+
+  // ---------- energy & the den ----------
+  // Energy = the lower of battery (full while charging) and today's chat allowance.
+  let energy = 100, energyInfo = null, inDen = false, wokenByUser = false, forcedEnergy = null;
+  let tuckedIn = false;   // sent to the den on purpose: stays until woken
+  const reportDen = () => post({ type: 'denState', inDen, tucked: tuckedIn });
+  const fmtK = (n) => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n);
+
+  function updateEnergy() {
+    const e = energyInfo || {};
+    const battery = e.hasBattery ? (e.charging ? 100 : e.battery) : 100;
+    const chat = e.budget ? Math.max(0, 100 - (e.tokensToday / e.budget) * 100) : 100;
+    energy = forcedEnergy ?? Math.round(Math.min(battery, chat));
+    const lamp = energy > 60 ? 1 : energy >= 20 ? .3 + .6 * (energy - 20) / 40 : .06 + .14 * energy / 20;
+    stage.style.setProperty('--lamp', lamp.toFixed(2));
+    stage.classList.toggle('ember', energy < 20);
+    stage.classList.toggle('charging', !!e.charging);
+    const bat = !e.hasBattery ? '🔌 plugged in' : e.charging ? `⚡ ${e.battery}% charging` : `🔋 ${e.battery}%`;
+    peek.innerHTML = `${bat}<br>💬 ${fmtK(e.tokensToday || 0)} / ${fmtK(e.budget || 10000)} today`;
+    if (e.budget) $('#budgetSel').value = String(e.budget);
+    if (energy >= 20) wokenByUser = false;
+    checkBedtime();
+  }
+
+  function checkBedtime() {
+    if (chatOpen || waiting || tuckedIn) return;
+    if (energy < 20) {
+      const idle = Date.now() - lastInteraction;
+      if (!inDen && (!wokenByUser || idle > 120000)) goToBed();
+    } else if (inDen) {
+      wakeUp(false);
+    }
+  }
+
+  function goToBed(instant) {
+    inDen = true; reportDen();
+    bubble.classList.remove('show');
+    if (instant) { document.body.classList.add('in-den'); applyDance(); setTimeout(reportHits, 50); return; }
+    pet.classList.add('sleepy');            // yawn…
+    applyDance();
+    setTimeout(() => {
+      if (!inDen) return;
+      document.body.classList.add('in-den'); // …and toddle into the den
+      setTimeout(reportHits, 1500);
+    }, 900);
+  }
+
+  function wakeUp(byUser) {
+    if (!inDen) return;
+    inDen = false; tuckedIn = false; wokenByUser = byUser; touch(); reportDen();
+    document.body.classList.remove('in-den');
+    setTimeout(() => {
+      flash('happy', 1200);
+      say(energy < 20 ? '*yawn* …just for a little bit 😴' : 'Good morning! ☀️ I feel so rested ✨', 4000);
+      applyDance(); reportHits();
+    }, 1200);
+  }
+
+  let peekTimer;
+  function showPeek(ms) {
+    peek.classList.add('show');
+    clearTimeout(peekTimer);
+    if (ms) peekTimer = setTimeout(() => peek.classList.remove('show'), ms);
+  }
 
   // ---------- native → web API ----------
   window.lumi = {
     openChat,
+    onEnergy(e) { energyInfo = e; updateEnergy(); },
+    tuckIn() { if (chatOpen) closeChat(); tuckedIn = true; inDen ? reportDen() : goToBed(); },
+    wake() { wakeUp(true); },
+    _forceEnergy(n) { forcedEnergy = n; updateEnergy(); },
     setDance(on) {
       danceEnabled = !!on;
       $('#danceToggle').checked = danceEnabled;
@@ -780,6 +1001,7 @@
       applyDance();
     },
     onConfig(cfg) {
+      if (cfg.tucked && !inDen) { tuckedIn = true; goToBed(true); }
       if ('dance' in cfg) lumi.setDance(cfg.dance);
       const r = document.querySelector(`input[name=backend][value=${cfg.backend}]`);
       if (r) r.checked = true;
@@ -803,6 +1025,9 @@
         }
       } else {
         // Lumi can switch her own dancing with [[dance:on]] / [[dance:off]]
+        const wantsDen = /\[\[den\]\]/.test(text);
+        text = text.replace(/\s*\[\[den\]\]\s*/g, ' ').trim();
+        if (wantsDen) setTimeout(() => lumi.tuckIn(), 2500);
         const tag = text.match(/\[\[dance:(on|off)\]\]/);
         text = text.replace(/\s*\[\[dance:(on|off)\]\]\s*/g, ' ').trim();
         if (tag) post({ type: 'setDance', on: tag[1] === 'on' });
@@ -817,7 +1042,7 @@
   };
 
   // ---------- hello ----------
-  setTimeout(() => { say("Hi! I'm Lumi ✨<br>Click me to chat · drag to move"); flash('happy', 1200); }, 600);
+  setTimeout(() => { if (!inDen) { say("Hi! I'm Lumi ✨<br>Click me to chat · drag to move"); flash('happy', 1200); } }, 600);
   setTimeout(reportHits, 50);
 
   // Preview in a normal browser: index.html?demo fakes a playing song.

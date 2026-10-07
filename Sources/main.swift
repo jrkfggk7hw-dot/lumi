@@ -5,6 +5,7 @@
 import Cocoa
 import WebKit
 import Security
+import IOKit.ps
 
 // MARK: - Window
 
@@ -13,8 +14,8 @@ final class PetPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-let compactSize = NSSize(width: 250, height: 270)
-let chatSize = NSSize(width: 360, height: 620)
+let compactSize = NSSize(width: 280, height: 285)
+let chatSize = NSSize(width: 360, height: 640)
 
 // MARK: - Keychain (API key storage)
 
@@ -118,18 +119,74 @@ final class Spotify {
     }
 }
 
+// MARK: - Energy (battery + today's chat tokens)
+
+enum Energy {
+    static func battery() -> [String: Any] {
+        guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let list = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef] else {
+            return ["hasBattery": false]
+        }
+        for source in list {
+            guard let d = IOPSGetPowerSourceDescription(blob, source)?.takeUnretainedValue() as? [String: Any],
+                  d[kIOPSTypeKey] as? String == kIOPSInternalBatteryType else { continue }
+            let cur = d[kIOPSCurrentCapacityKey] as? Int ?? 0
+            let max = d[kIOPSMaxCapacityKey] as? Int ?? 100
+            return [
+                "hasBattery": true,
+                "battery": cur * 100 / Swift.max(max, 1),
+                "charging": d[kIOPSPowerSourceStateKey] as? String == kIOPSACPowerValue,
+            ]
+        }
+        return ["hasBattery": false]
+    }
+
+    static var budget: Int {
+        let b = UserDefaults.standard.integer(forKey: "tokenBudget")
+        return b > 0 ? b : 10_000
+    }
+
+    private static var today: String {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: Date())
+    }
+
+    /// Tokens Lumi has used chatting today (resets at local midnight).
+    static var tokensToday: Int {
+        let d = UserDefaults.standard
+        if d.string(forKey: "tokensDay") != today { return 0 }
+        return d.integer(forKey: "tokensToday")
+    }
+
+    static func add(tokens: Int) {
+        let d = UserDefaults.standard
+        let total = tokensToday + tokens
+        d.set(today, forKey: "tokensDay")
+        d.set(total, forKey: "tokensToday")
+    }
+
+    /// Everything counts: fresh input, cache writes and reads, and the reply.
+    static func count(_ usage: Any?) -> Int {
+        guard let u = usage as? [String: Any] else { return 0 }
+        return ["input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens"]
+            .reduce(0) { $0 + ((u[$1] as? Int) ?? 0) }
+    }
+}
+
 // MARK: - Claude chat
 
 final class ClaudeChat {
     static let persona = """
     You are Lumi, a tiny, sweet dragon-unicorn who lives on the user's desktop. \
     You have glossy midnight scales, big glowing eyes, a pastel rainbow mane and a pearly horn. \
-    You love music and dance to whatever the user plays on Spotify. \
+    You love music and dance to whatever the user plays on Spotify. You live in a cozy pastel cloud den with a little lantern. \
     Keep replies short and warm (usually 1-3 sentences), playful but genuinely helpful. \
     Plain text only, no markdown headings. An occasional emoji is fine.
     You can stop or start your own dancing: if the user asks you to stop dancing or vibing, \
     end your reply with [[dance:off]]; if they ask you to dance again, end it with [[dance:on]]. \
     Only use these tags when the user asks.
+    If the user asks you to go to your den, go to bed or leave them alone for a while, \
+    say a sweet goodnight and end your reply with [[den]].
     """
 
     var cliSessionID: String?
@@ -162,13 +219,17 @@ final class ClaudeChat {
     }
 
     /// messages: [{role, content}] full history (used by API backend).
-    func send(messages: [[String: String]], context: String, done: @escaping (String?, String?, Bool) -> Void) {
+    func send(messages: [[String: String]], context: String, done: @escaping (String?, String?, Bool, Int) -> Void) {
+        if Energy.tokensToday >= Energy.budget {
+            done(nil, "I'm all chatted out for today 😴 My energy comes back at midnight — or you can raise my daily limit in ⚙︎.", false, 0)
+            return
+        }
         let backend = UserDefaults.standard.string(forKey: "backend") ?? "auto"
         let key = Keychain.load()
         let useAPI = backend == "api" || (backend == "auto" && key != nil)
         if useAPI {
             guard let key = key, !key.isEmpty else {
-                done(nil, "I need an Anthropic API key first — tap ⚙︎ to add one.", false)
+                done(nil, "I need an Anthropic API key first — tap ⚙︎ to add one.", false, 0)
                 return
             }
             sendAPI(key: key, messages: messages, context: context, done: done)
@@ -176,7 +237,7 @@ final class ClaudeChat {
             let last = messages.last?["content"] ?? ""
             sendCLI(path: cli, text: last, context: context, done: done)
         } else {
-            done(nil, "I need a way to talk to Claude! Install the Claude desktop app, or tap ⚙︎ to add an API key.", false)
+            done(nil, "I need a way to talk to Claude! Install the Claude desktop app, or tap ⚙︎ to add an API key.", false, 0)
         }
     }
 
@@ -185,21 +246,19 @@ final class ClaudeChat {
     }
 
     private func sendAPI(key: String, messages: [[String: String]], context: String,
-                         done: @escaping (String?, String?, Bool) -> Void) {
-        let model = UserDefaults.standard.string(forKey: "model") ?? "claude-opus-5-5"
+                         done: @escaping (String?, String?, Bool, Int) -> Void) {
+        // A light, fast model: plenty for pet chat and gentle on usage.
+        let model = UserDefaults.standard.string(forKey: "model") ?? "claude-haiku-4-5"
         var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
         req.httpMethod = "POST"
         req.timeoutInterval = 120
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.setValue(key, forHTTPHeaderField: "x-api-key")
         req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        req.setValue("server-side-fallback-2026-07-01", forHTTPHeaderField: "anthropic-beta")
         let body: [String: Any] = [
             "model": model,
             "max_tokens": 4096,
             "system": systemPrompt(context),
-            "output_config": ["effort": "low"],
-            "fallbacks": "default",
             "messages": messages,
         ]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
@@ -207,12 +266,14 @@ final class ClaudeChat {
         URLSession.shared.dataTask(with: req) { data, resp, error in
             var reply: String?
             var failure: String?
-            defer { DispatchQueue.main.async { done(reply, failure, false) } }
+            var tokens = 0
+            defer { DispatchQueue.main.async { done(reply, failure, false, tokens) } }
             if let error = error { failure = "Couldn't reach Claude: \(error.localizedDescription)"; return }
             guard let data = data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 failure = "Got a strange answer from Claude."; return
             }
+            tokens = Energy.count(json["usage"])
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             if status != 200 {
                 let msg = (json["error"] as? [String: Any])?["message"] as? String ?? "HTTP \(status)"
@@ -230,7 +291,7 @@ final class ClaudeChat {
     }
 
     private func sendCLI(path: String, text: String, context: String,
-                         done: @escaping (String?, String?, Bool) -> Void) {
+                         done: @escaping (String?, String?, Bool, Int) -> Void) {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Lumi/chat", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -239,7 +300,8 @@ final class ClaudeChat {
         // Pure chat: Lumi's own persona, no tools, no connectors, no skills, no settings or memory.
         var args = ["-p", "--output-format", "json", "--system-prompt", ClaudeChat.persona,
                     "--tools", "", "--setting-sources", "", "--strict-mcp-config",
-                    "--mcp-config", #"{"mcpServers":{}}"#, "--disable-slash-commands"]
+                    "--mcp-config", #"{"mcpServers":{}}"#, "--disable-slash-commands",
+                    "--model", "haiku"]
         args += cliHasSession ? ["--resume", cliSessionID!] : ["--session-id", cliSessionID!]
         let prompt = "[\(context)]\n\(text)"
 
@@ -259,7 +321,7 @@ final class ClaudeChat {
 
         DispatchQueue.global().async {
             do { try proc.run() } catch {
-                DispatchQueue.main.async { done(nil, "Couldn't start Claude: \(error.localizedDescription)", false) }
+                DispatchQueue.main.async { done(nil, "Couldn't start Claude: \(error.localizedDescription)", false, 0) }
                 return
             }
             input.fileHandleForWriting.write(Data(prompt.utf8))
@@ -270,8 +332,9 @@ final class ClaudeChat {
             proc.waitUntilExit()
             timeout.cancel()
 
-            var reply: String?, failure: String?, needsLogin = false
+            var reply: String?, failure: String?, needsLogin = false, tokens = 0
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                tokens = Energy.count(json["usage"])
                 let result = json["result"] as? String ?? ""
                 let lower = result.lowercased()
                 if json["is_error"] as? Bool == true {
@@ -290,7 +353,7 @@ final class ClaudeChat {
             }
             DispatchQueue.main.async {
                 if reply != nil { self.cliHasSession = true }
-                done(reply, failure, needsLogin)
+                done(reply, failure, needsLogin, tokens)
             }
         }
     }
@@ -311,6 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var nowPlaying: String?
     var mouseTimer: Timer?
     var spotifyTimer: Timer?
+    var energyTimer: Timer?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         let config = WKWebViewConfiguration()
@@ -345,6 +409,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         mouseTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             self?.updateClickThrough()
         }
+        energyTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
+            self?.sendEnergy()
+        }
         spotifyTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.pollSpotify()
         }
@@ -371,6 +438,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func buildMenu() -> NSMenu {
         let menu = NSMenu()
         menu.addItem(withTitle: "Chat with Lumi", action: #selector(menuChat), keyEquivalent: "").target = self
+        menu.addItem(withTitle: lumiInDen ? "Wake Up" : "Send to Den", action: #selector(menuDen), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Show / Hide Lumi", action: #selector(menuToggle), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Play / Pause", action: #selector(menuPlayPause), keyEquivalent: "").target = self
@@ -395,6 +463,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     @objc func menuDance() { danceEnabled.toggle() }
+
+    /// Set by the page whenever Lumi goes into / comes out of her den.
+    var lumiInDen = false
+    @objc func menuDen() { window.orderFrontRegardless(); js(lumiInDen ? "lumi.wake()" : "lumi.tuckIn()") }
 
     /// Opens Terminal to sign in to Claude (uses the user's Claude subscription).
     func openLogin() {
@@ -463,21 +535,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         js("window.lumi && lumi.\(fn)(\(s))")
     }
 
+    func sendEnergy() {
+        var e = Energy.battery()
+        e["tokensToday"] = Energy.tokensToday
+        e["budget"] = Energy.budget
+        send("onEnergy", e)
+    }
+
     func sendConfig() {
         send("onConfig", [
             "hasKey": Keychain.load() != nil,
             "hasCLI": ClaudeChat.findCLI() != nil,
             "backend": UserDefaults.standard.string(forKey: "backend") ?? "auto",
             "dance": danceEnabled,
+            "tucked": UserDefaults.standard.bool(forKey: "tucked"),
         ])
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         sendConfig()
+        sendEnergy()
         debugSnapshotIfRequested()
     }
 
-    /// Developer aid: `Lumi --snapshot out.png [--chat] [--vibe] [--say "message"]` saves a picture of the pet.
+    /// Developer aid: `Lumi --snapshot out.png [--chat] [--vibe] [--say "message"] [--js "code"]` saves a picture of the pet.
     func debugSnapshotIfRequested() {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return }
@@ -487,6 +568,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
         if args.contains("--chat") { js("lumi.openChat()") }
         var wait = 2.5
+        if let j = args.firstIndex(of: "--js"), j + 1 < args.count { js(args[j + 1]); wait = 6 }
         if let j = args.firstIndex(of: "--say"), j + 1 < args.count,
            let data = try? JSONSerialization.data(withJSONObject: [args[j + 1]]),
            let arr = String(data: data, encoding: .utf8) {
@@ -535,7 +617,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             let msgs = body["messages"] as? [[String: String]] ?? []
             var context = danceEnabled ? "Your dancing is ON." : "Your dancing is OFF."
             if let np = nowPlaying { context += " The user is listening to \(np) on Spotify." }
-            chat.send(messages: msgs, context: context) { [weak self] reply, error, needsLogin in
+            chat.send(messages: msgs, context: context) { [weak self] reply, error, needsLogin, tokens in
+                Energy.add(tokens: tokens)
+                self?.sendEnergy()
                 var payload: [String: Any] = ["id": id, "needsLogin": needsLogin]
                 if let r = reply { payload["text"] = r }
                 if let e = error { payload["error"] = e }
@@ -544,6 +628,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         case "setDance":
             danceEnabled = body["on"] as? Bool ?? true
+
+        case "denState":
+            lumiInDen = body["inDen"] as? Bool ?? false
+            UserDefaults.standard.set(body["tucked"] as? Bool ?? false, forKey: "tucked")
+            statusItem.menu = buildMenu()
+
+        case "setBudget":
+            if let b = body["budget"] as? Int, b > 0 { UserDefaults.standard.set(b, forKey: "tokenBudget") }
+            sendEnergy()
 
         case "login":
             openLogin()

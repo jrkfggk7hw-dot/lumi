@@ -7,11 +7,13 @@
 
 ## What she does
 
-- 🐉 **Floats on your desktop** above your windows. Drag her anywhere; she remembers where you left her.
-- 🎵 **Vibes to your music.** When the Spotify app is playing, she bobs her head, flaps her wings and puffs out music notes. She'll tell you when the song changes.
+- ☁️ **Lives in a cozy cloud den** that floats on your desktop. Drag her anywhere; she remembers where you left her. The den is small (about the size of two app icons), and everything except Lumi, her lantern and her doorway is click-through.
+- 🏮 **Her lantern shows her energy**, like a Sims needs bar: it's based on your Mac's battery and how much she's chatted today. Hover over it to peek at the numbers. When it burns low, she yawns and toddles into her den to sleep. Click the doorway to wake her.
+- 🛌 **Tuck her in whenever you like.** Right-click → **Send to Den**, or just tell her it's bedtime. She stays in until you wake her.
+- 🎵 **Vibes to your music.** When the Spotify app is playing she dances (five different moves), puffs out music notes and tells you when the song changes. Pause the music and she pouts. Ask her to stop dancing and she will.
 - 💬 **Click her to chat.** Lumi is powered by Claude. She knows what song you're listening to.
 - 😴 **Has feelings.** She blinks, perks up her ears when you hover, and dozes off if you ignore her for a while.
-- Right-click her (or use the ✨ in the menu bar) for play/pause, next track, settings and quit.
+- Right-click her (or use the ✨ in the menu bar) for play/pause, next track, dancing on/off, Send to Den, settings and quit.
 
 ## Install
 
@@ -29,8 +31,12 @@ Open the chat and tap **⚙︎** to pick how Lumi talks to Claude:
 
 | Option | What you need | Cost |
 | --- | --- | --- |
-| **Claude Code login** | [Claude Code](https://claude.com/claude-code) installed and logged in on your Mac | Uses your existing Claude plan |
+| **My Claude account** | The [Claude desktop app](https://claude.ai/download) on your Mac. Lumi asks you to sign in once. | Uses your existing Claude plan |
 | **Anthropic API key** | A key from [console.anthropic.com](https://console.anthropic.com/settings/keys) | Pay-as-you-go, a fraction of a cent per message |
+
+Lumi chats using **Claude Haiku**, Claude's small, fast model, so she's gentle on your plan's usage. She also has a **daily chat limit** (10k tokens by default, about 10 messages); when she hits it she gets sleepy and stops chatting until midnight. You can change the limit in ⚙︎ → Energy.
+
+When Lumi uses your Claude account, she runs as pure chat: no tools, no connectors, no access to your files and no memory of your other Claude conversations.
 
 Your API key is stored only in your Mac's Keychain and is sent only to Anthropic. Chat history stays on your Mac.
 
